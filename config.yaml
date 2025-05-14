@@ -1,0 +1,17 @@
+LoaderParams:
+  numWPTS: 8000
+  ParticleNumber: 100
+  dims: 3
+  norm: True
+
+ModelParams:
+  embedDim: 256
+  smoothres: 1
+
+TrainingParams:
+  epochs: 30
+  batch_size: 256
+  lr: 1e-3
+  targetLayer: 0
+
+deviceNum : 0
