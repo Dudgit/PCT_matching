@@ -20,7 +20,7 @@ class pctDataset():
         return len(self.allPath)
     
     def __normalize__(self, inpData):
-        norm = lambda x: (x - x.min()) / (x.max() - x.min())
+        norm = lambda x: (x - x.mean(axis=0)) / x.std(axis=0)
         return norm(inpData)
     
     def __getitem__(self, idx):

@@ -48,4 +48,9 @@ if __name__ == '__main__':
     #for sres in range(1,4):
     #args.comment = args.comment + f"_smoothRes{sres}"
     #conf.ModelParams.smoothres = sres
-    main(conf,args)
+    #TODO: check beta scheduling later
+    baseComment = args.comment
+    for beta in [0.01,0.1, 0.2, 0.5,0.8, 0.9, 0.99]:
+        numSmooth = conf.ModelParams.smoothres 
+        args.comment = baseComment + f"_smoothRes{numSmooth}" + f"_beta{beta}"
+        main(conf,args)

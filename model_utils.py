@@ -9,7 +9,7 @@ class EmbedHead(torch.nn.Module):
         super(EmbedHead, self).__init__()
         layers = [nn.Linear(inDims,embedDim)]
         for i in range(1,numLayers):
-            layers.append(nn.LeakyReLU())
+            layers.append(nn.ReLU())
             layers.append(nn.Dropout(dropout))
             layers.append(nn.Linear(embedDim*i,embedDim*(i+1)))
         
@@ -24,29 +24,26 @@ class EmbedHead(torch.nn.Module):
         return x
 
 class SHModel(nn.Module):
-    def __init__(self):
+    def __init__(self,beta = 0.5):
         super(SHModel, self).__init__()
         self.sh1 = nn.Softmax(dim = -2)
         self.sh2 = nn.Softmax(dim = -1)
-        
+        self.beta = beta
     def forward(self,x):
-        x = x - self.sh1(x)
-        x = x - self.sh2(x)
+        x = ((1-self.beta)*x) - (self.beta*self.sh1(x))
+        x = ((1-self.beta)*x) - (self.beta*self.sh2(x))
         return x
     
 class DistModel(torch.nn.Module):
-    def __init__(self,embedDim,inDims,smoothres:int = 1):
+    def __init__(self,embedDim,inDims,smoothres:int = 4, beta = 0.5):
         super(DistModel, self).__init__()
-        self.ehead1 = EmbedHead(embedDim=embedDim,inDims=inDims)
-        self.ehead2 = EmbedHead(embedDim=embedDim,inDims=inDims)
+        self.ehead = EmbedHead(embedDim=embedDim,inDims=inDims)
         smoothLayers = [*[SHModel()]*smoothres]
         self.smoothing =  torch.nn.Sequential(*smoothLayers)
         self.act = nn.Softmax(dim = -2)
 
     def forward(self,x1,x2):
-        xe1 = self.ehead1(x1,x2)
-        #xe2 = self.ehead2(x1,x2)
-        x = xe1 #+ xe2
+        x = self.ehead(x1,x2)
         x = self.smoothing(x)
         x = self.act(x)
         return x
@@ -55,7 +52,6 @@ class Trainer():
     def __init__(self,targetLayer,device):
         self.targetLayer = targetLayer
         self.device = device
-    
 
     def trainStep(self,model,batch,target, isTrain:bool = True):
         x_curr = batch[:,:,self.targetLayer].to(self.device)
