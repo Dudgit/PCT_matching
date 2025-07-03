@@ -11,9 +11,12 @@ My aim is to create a matching neural network, which will create a particle conn
   
 The next step which I'm currently working on, is that it is possible that matching algorithm will find more than 1 most likely match for a particle hit. I'm trying to translate the Sinkhorn matching algorithm into some kind of deep neural network structure or, something similar to that, which will solve this problem. The smoothlayers aiming to do this, since if I renormalize (between 0-1 not standardize) the rows and the columns in an alternating fashion I will make this matrix to have 1 to 1 matching.  
 
-The base structure of the model can be seen in [Figure 1](/Base_architecture.png), which is already achiving 67% percent accuracy in the matching. To improve it I already added some extra layers for the embedding. I'm experimenting all the time, but one of the best improvements can be seen in [Figure 2](/Alternate_version.png).
+The base structure of the model can be seen in ![Figure 1](/Base_architecture.png)  , which is already achiving 67% percent accuracy in the matching. To improve it I already added some extra layers for the embedding. I'm experimenting all the time, but one of the best improvements can be seen in ![Figure 2.](/Alternate_version.png)
 
-
+### Smoothing Layer
+Add idea: based on Sinkhorn.  
+Add problem: Vanishing gradient.  
+Add solution idea: beta.   
 
 ## data.py
 A simple data loader that will load files for training. Data is coming from [GATE](http://www.opengatecollaboration.org/) simulations. The simulations were prepared for the pCT detector system.
