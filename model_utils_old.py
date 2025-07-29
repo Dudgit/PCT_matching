@@ -11,8 +11,8 @@ class EmbedHead(torch.nn.Module):
         super(EmbedHead, self).__init__()
         layers = [nn.Linear(inDims,embedDim)]
         for i in range(1,numLayers):
-            layers.append(nn.LeakyReLU())
-            #layers.append(nn.Dropout(dropout))
+            layers.append(nn.ReLU())
+            layers.append(nn.Dropout(dropout))
             layers.append(nn.Linear(embedDim*i,embedDim*(i+1)))
         
         self.prevEmbed = torch.nn.Sequential(*layers)
@@ -30,18 +30,18 @@ class SHModel(nn.Module):
         super(SHModel, self).__init__()
         self.sh1 = nn.Softmax(dim = -2)
         self.sh2 = nn.Softmax(dim = -1)
-        self.beta =  beta
+        self.beta = beta
     def forward(self,x):
         x = ((1-self.beta)*x) - (self.beta*self.sh1(x))
         x = ((1-self.beta)*x) - (self.beta*self.sh2(x))
-        #x = x - self.sh1(x)
-        #x = x - self.sh2(x)
         return x
+    
 
 
 class PosPred2(nn.Module):
     def __init__(self,in_dims:int, hidden:int,numLayers:int = 2):
         super(PosPred2,self).__init__()
+
         layers = [nn.Linear(in_dims*2,hidden),nn.LeakyReLU()]
         for i in range(numLayers):
             layers.append(nn.Linear(hidden * (i+1),hidden * (i+2)))
@@ -57,17 +57,14 @@ class PosPred2(nn.Module):
 
 
 class DistModel(torch.nn.Module):
-    def __init__(self,embedDim,inDims,smoothres:int = 4,beta:float = 0.5,hidden:int = 32,nlayers:int = 4):
+    def __init__(self,embedDim,inDims,smoothres:int = 4,beta:float = 0.5):
         super(DistModel, self).__init__()
-        self.posModel = PosPred2(in_dims=inDims,hidden=hidden)
-        self.ehead = EmbedHead(embedDim=embedDim,inDims=inDims,numLayers=nlayers)
-        shmLayers = [ SHModel(beta=beta) for _ in range(smoothres)]
-        smoothLayers = [*shmLayers]
+        self.ehead = EmbedHead(embedDim=embedDim,inDims=inDims)
+        smoothLayers = [*[SHModel(beta=beta)]*smoothres]
         self.smoothing =  torch.nn.Sequential(*smoothLayers)
         self.act = nn.Softmax(dim = -2)
 
-    def forward(self,x1,x2,x3):
-        x2 = self.posModel(x2,x3)
+    def forward(self,x1,x2):
         x = self.ehead(x1,x2)
         x = self.smoothing(x)
         x = self.act(x)
@@ -81,9 +78,8 @@ class Trainer():
     def trainStep(self,model,batch,target, isTrain:bool = True):
         x_curr = batch[:,:,self.targetLayer].to(self.device)
         x_prev = batch[:,:,self.targetLayer+1].to(self.device)
-        x_prev2 = batch[:,:,self.targetLayer+2].to(self.device)
-        output = model(x_curr,x_prev,x_prev2)
-        loss = self.criterion(output,target) + (1-torch.sum(output,dim = -1).mean())**2 + (1-torch.sum(output,dim = -2).mean())**2
+        output = model(x_curr,x_prev)
+        loss = self.criterion(output,target)
         if isTrain:
             self.optimizer.zero_grad()
             loss.backward()
@@ -95,24 +91,21 @@ class Trainer():
         output, loss = self.trainStep(model = model,batch=batch,target=target,isTrain=train)
         stepAcc = acc(output,target,axi=1)
         stepAcc2 = acc(output,target,axi=2)
+        #fig = showConfMatrix(output.detach().cpu().numpy())
         loobObj.set_postfix({'Accuracy':f'{stepAcc:.4f}','Accuracy2':f'{stepAcc2:.4f}','Loss':f'{loss:.4f}'})
         return loss,stepAcc,stepAcc2
-
-    def train(self,model,loader,numEpochs,valLoader,writer,optimizer,criterion,fintune:bool = False,initSteps:int = 0):
+    
+    def train(self,model,loader,numEpochs,valLoader,writer,optimizer,criterion):
         steps = len(loader)
         valsteps = len(valLoader)
-
-        #if fintune:
-        #    for param in model.ehead.parameters():
-        #        param.requires_grad = False        
+        
         self.optimizer = optimizer(model.parameters())
         self.criterion = criterion()
-
-        for epoch in range(initSteps,numEpochs+initSteps):
+        for epoch in range(numEpochs):
             epochLoss,epochAcc,epochAcc2 = 0.,0.,0.
             valepochLoss, valepochacc,valepochacc2 = 0.,0.,0.
             
-            pbar = tqdm.tqdm(loader,desc=f'Fine tune epoch {epoch}/{numEpochs+initSteps}',colour='green') if fintune else tqdm.tqdm(loader,desc=f'Epoch {epoch}/{numEpochs+initSteps}',colour='green')
+            pbar = tqdm.tqdm(loader,desc=f'Epoch {epoch}/{numEpochs}',colour='green')
             model.train()
             for batch in pbar:
                 loss, stepAcc, stepAcc2 =self.step(model=model,batch=batch,loobObj=pbar,train=True)
@@ -121,16 +114,15 @@ class Trainer():
                 epochAcc2 += stepAcc2
             #output = self.trainStep(model = model, batch = batch, target =torch.eye(batch.shape[1]).repeat((batch.shape[0],1,1)).to(self.device), isTran = False)
             #fig = showConfMatrix(output.detach().cpu().numpy())
-            logMetrics(epochAcc/steps,epochAcc2/steps,epochLoss/steps,fig=None,e=epoch+fintune,writer = writer)
+            logMetrics(epochAcc/steps,epochAcc2/steps,epochLoss/steps,fig=None,e=epoch,writer = writer)
 
-            valPbar = tqdm.tqdm(valLoader,desc=f'Validation Epoch {epoch}/{numEpochs+initSteps}',colour='green')
+            valPbar = tqdm.tqdm(valLoader,desc=f'Validation Epoch {epoch}/{numEpochs}',colour='green')
             model.eval()
             for batch in valPbar:
                 valloss, valstepAcc, valstepAcc2 = self.step(model=model,batch=batch,loobObj=valPbar,train=False)
                 valepochLoss += valloss
                 valepochacc += valstepAcc
                 valepochacc2 += valstepAcc2
-            output, _ = self.trainStep(model = model, batch = batch, target =torch.eye(batch.shape[1]).repeat((batch.shape[0],1,1)).to(self.device), isTrain = False)
-            fig = showConfMatrix(output.detach().cpu().numpy())
-            writer.add_figure('Validation/Probabilty',fig,epoch)
-            logMetrics(valepochacc/valsteps,valepochacc2/valsteps,valepochLoss/valsteps,fig=None,e=epoch+fintune,writer=writer,c = 'Validation') 
+            #output = self.trainStep(model = model, batch = batch, target =torch.eye(batch.shape[1]).repeat((batch.shape[0],1,1)).to(self.device), isTran = False)
+            #fig = showConfMatrix(output.detach().cpu().numpy())
+            logMetrics(valepochacc/valsteps,valepochacc2/valsteps,valepochLoss/valsteps,fig=None,e=epoch,writer=writer,c = 'Validation') 

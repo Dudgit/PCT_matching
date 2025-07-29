@@ -6,7 +6,7 @@ from model_utils import Trainer
 from torch.utils.tensorboard import SummaryWriter
 import argparse
 
-ROOT_TO_DATA = '/home/bdudas/PCT_tracking/data'
+ROOT_TO_DATA = '/home/bdudas/PCT_tracking/data_old'
 def getLoader(conf):
     trainDataset = pctDataset(ROOT_TO_DATA +"/train",**conf.LoaderParams)
     trainLoader = torch.utils.data.DataLoader(trainDataset,batch_size=conf.TrainingParams.batch_size,shuffle=True)
@@ -23,14 +23,17 @@ def main(conf,args):
 
     writer = SummaryWriter(comment= "_"+ args.comment)
     sample = next(iter(trainLoader))
-    writer.add_graph(model, (sample[:,:,0].to(device),sample[:,:,1].to(device)))
+    writer.add_graph(model, (sample[:,:,0].to(device),sample[:,:,1].to(device),sample[:,:,2].to(device)))
     #model = torch.compile(model)
     
     with open(f'{writer.log_dir}/config.yaml', 'w') as f:
         OmegaConf.save(conf, f)
         
+    fineTuneLoss = torch.nn.CrossEntropyLoss
     myTrainer.train(model = model, loader = trainLoader,numEpochs=conf.TrainingParams.epochs,valLoader = valLoader,
-                    writer=writer,optimizer=torch.optim.Adam,criterion=torch.nn.CrossEntropyLoss)
+                    writer=writer,optimizer=torch.optim.Adam,criterion=torch.nn.MSELoss)
+    myTrainer.train(model=model,loader=trainLoader,numEpochs= 10 ,writer=writer,valLoader=valLoader,
+                    optimizer=torch.optim.Adam,criterion=fineTuneLoss,fintune=True,initSteps=conf.TrainingParams.epochs)
 
 
 if __name__ == '__main__':
@@ -43,14 +46,11 @@ if __name__ == '__main__':
     argparser.add_argument('-g','--gpu',type=int,default=0)
     argparser.add_argument('-c','--comment',type=str,default='')
     args = argparser.parse_args()
-
     conf.deviceNum = args.gpu
-    #for sres in range(1,4):
-    #args.comment = args.comment + f"_smoothRes{sres}"
-    #conf.ModelParams.smoothres = sres
-    #TODO: check beta scheduling later
     baseComment = args.comment
-    for beta in [0.01,0.1, 0.2, 0.5,0.8, 0.9, 0.99]:
-        numSmooth = conf.ModelParams.smoothres 
-        args.comment = baseComment + f"_smoothRes{numSmooth}" + f"_beta{beta}"
+
+
+    for smoothres in range(2,10):
+        conf.ModelParams.smoothres = smoothres
+        args.comment = baseComment+ f"{smoothres=}"
         main(conf,args)

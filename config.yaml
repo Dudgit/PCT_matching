@@ -6,13 +6,17 @@ LoaderParams:
 
 ModelParams:
   embedDim: 256
-  smoothres: 5
-  beta: 0.5
+  smoothres: 4
+  beta: 0.48
+  hidden: 128
+  nlayers: 6
 
 TrainingParams:
-  epochs: 30
+  epochs: 50
   batch_size: 256
   lr: 1e-3
   targetLayer: 0
-
+  l1: 1.0
+  l2: 1.0
 deviceNum : 0
+
